@@ -31,10 +31,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${VERSION:-1.0.0}</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>LSUIElement</key><true/>
-  <!-- The executable is a shell script, which macOS would otherwise start under Rosetta on
-       Apple Silicon and so run Chrome emulated (slow, and the window never connects). -->
-  <key>LSArchitecturePriority</key><array><string>arm64</string><string>x86_64</string></array>
-  <key>LSRequiresNativeExecution</key><true/>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
