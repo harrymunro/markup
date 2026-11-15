@@ -1,8 +1,59 @@
-# Project Instructions for AI Agents
+# Markup - Project Instructions
 
-This file provides instructions and context for AI coding agents working on this project.
+Markup is a local tool for drawing feedback on an HTML page, PDF or screenshot and
+exporting it as Markdown plus screenshots that an AI coding agent can read. No npm
+dependencies: Node.js and Google Chrome only. Work tracking with **beads** (`bd`).
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
+**Before anything else, run `bd prime` and heed its output** (the SessionStart hook
+does this in Claude Code).
+
+## Commands
+
+```bash
+./markup                      # open the window
+./markup path/to/file.html    # open a file (HTML, PDF or image)
+./markup --wait file.html     # block until feedback is exported, print feedback.md's path
+npm test                      # end-to-end tests in headless Chrome (HTML, PDF, image, responsive)
+scripts/build-app.sh          # build Markup.app, the Dock launcher (gitignored; path is baked in)
+node scripts/render-icons.js  # rebuild assets/Markup.icns from assets/icon.svg
+```
+
+## Architecture
+
+- `server.js` - everything server-side: a loopback HTTP server, the launcher for a
+  dedicated Chrome window (own profile under `~/Library/Application Support/html-markup`),
+  and the DevTools pipe to it. The pipe is what takes screenshots
+  (`Page.captureScreenshot`) and resolves the real path of a picked or dropped file
+  (`DOM.getFileInfo`).
+- Routing: everything under `/__markup__/` is the app and its API; every other path is
+  the document being reviewed, served from its own folder so relative and root-absolute
+  assets resolve. HTML is served with a `data-mk-line` attribute on each start tag,
+  which is where the `file:line` references in feedback come from.
+- `app/app.js` - the UI. The reviewed page sits in a same-origin iframe; marks are drawn
+  on an overlay and each is anchored to a DOM element (geometry is stored relative to
+  the anchor's top-left), so marks follow scrolling, reflow and viewport changes.
+  `housekeeping()` hides marks whose element is covered or gone and re-finds elements
+  by selector after a reload.
+- `app/pdf.html`, `app/image.html` - viewers for non-HTML documents. They expose
+  `window.__mkViewer` (`anchorAt`, `describe`, `idle`) so the same marking code works.
+- `vendor/pdfjs/` - pdf.js, vendored so there is no install step.
+- `test/` - `driver.js` drives the real app in headless Chrome over the same pipe;
+  `smoke.js` and `viewers.js` are the suites.
+
+## Conventions
+
+- No npm dependencies and no build step. Keep it that way unless Harry says otherwise.
+- No API reachable from a web page may accept a file path: paths come only from the
+  command line (token-authenticated) or from Chrome's own file picker and drops. The
+  server answers only to its loopback Host and checks Origin on every POST.
+- On Apple Silicon Chrome must be started natively (`nativeLaunch` in `server.js`):
+  launched from a script-based .app it otherwise runs under Rosetta and the window
+  may never connect.
+- Run `npm test` after any change to `server.js` or `app/`. The tests open a real
+  (headless) Chrome; a change that only passes by reading the code is not checked.
+- Plain hyphens rather than em dashes in notes and docs written from here on; British
+  English in prose.
+
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -56,22 +107,3 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
-
-
-## Build & Test
-
-_Add your build and test commands here_
-
-```bash
-# Example:
-# npm install
-# npm test
-```
-
-## Architecture Overview
-
-_Add a brief overview of your project architecture_
-
-## Conventions & Patterns
-
-_Add your project-specific conventions here_

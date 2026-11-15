@@ -1,0 +1,16 @@
+#!/bin/sh
+# Markup launcher: ./markup [file]    (see ./markup --help)
+SELF="$0"
+while [ -L "$SELF" ]; do
+  LINK="$(readlink "$SELF")"
+  case "$LINK" in
+    /*) SELF="$LINK" ;;
+    *) SELF="$(dirname "$SELF")/$LINK" ;;
+  esac
+done
+DIR="$(cd "$(dirname "$SELF")" && pwd)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "Markup needs Node.js (https://nodejs.org) but 'node' was not found on your PATH." >&2
+  exit 1
+fi
+exec node "$DIR/server.js" "$@"

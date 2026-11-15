@@ -1,0 +1,17 @@
+{
+  "name": "html-markup",
+  "version": "1.0.0",
+  "description": "Draw feedback on an HTML page, PDF or screenshot and export it for an AI coding agent.",
+  "private": true,
+  "license": "UNLICENSED",
+  "bin": {
+    "markup": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js && node test/viewers.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PDF</title>
+<style>
+  html { background: #54575c; }
+  body { margin: 0; padding: 20px 0 40px; font: 13px -apple-system, system-ui, sans-serif; }
+  .page { position: relative; margin: 0 auto 16px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); overflow: hidden; }
+  .page canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .page .t { position: absolute; color: transparent; white-space: pre; line-height: 1; overflow: hidden; cursor: text; }
+  .page .t::selection { background: rgba(0, 110, 255, .3); }
+  #msg { padding: 80px 20px; color: #fff; text-align: center; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="msg">Loading PDF…</div>
+<div id="pages"></div>
+<script type="module">
+import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
+
+const base = new URL('./vendor/pdfjs/', location.href).href;
+pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+
+const msg = document.getElementById('msg');
+const holder = document.getElementById('pages');
+const pages = [];
+let pending = 0;
+let idleWaiters = [];
+
+function settle() {
+  if (pending === 0) { for (const w of idleWaiters) w(); idleWaiters = []; }
+}
+
+async function render(entry) {
+  if (entry.state) return;
+  entry.state = 'rendering';
+  pending++;
+  try {
+    const page = await entry.pdf.getPage(entry.number);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const viewport = page.getViewport({ scale: entry.scale * dpr });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    entry.el.prepend(canvas);
+    await page.render({ canvas, viewport }).promise;
+
+    // Invisible text boxes over the page: they make text selectable and let Markup
+    // report which words an annotation sits on.
+    const css = page.getViewport({ scale: entry.scale });
+    const content = await page.getTextContent();
+    const frag = document.createDocumentFragment();
+    for (const item of content.items) {
+      if (!item.str || !item.str.trim()) continue;
+      const tx = pdfjs.Util.transform(css.transform, item.transform);
+      const height = Math.hypot(tx[2], tx[3]);
+      if (!height) continue;
+      const span = document.createElement('span');
+      span.className = 't';
+      span.textContent = item.str;
+      span.style.left = tx[4] + 'px';
+      span.style.top = (tx[5] - height) + 'px';
+      span.style.width = Math.max(1, item.width * entry.scale) + 'px';
+      span.style.height = height * 1.15 + 'px';
+      span.style.fontSize = height + 'px';
+      frag.append(span);
+    }
+    entry.el.append(frag);
+    entry.state = 'done';
+  } catch (err) {
+    entry.state = null;
+    console.error(err);
+  } finally {
+    pending--;
+    settle();
+  }
+}
+
+function pageAt(x, y) {
+  const hit = document.elementFromPoint(x, y);
+  const direct = hit && hit.closest('.page');
+  if (direct) return pages.find((p) => p.el === direct);
+  let best = null;
+  let bestDist = Infinity;
+  for (const p of pages) {
+    const r = p.el.getBoundingClientRect();
+    const dist = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (dist < bestDist) { best = p; bestDist = dist; }
+  }
+  return best;
+}
+
+window.__mkViewer = {
+  kind: 'pdf',
+  anchorAt(x, y) {
+    const p = pageAt(x, y);
+    return p ? p.el : document.body;
+  },
+  describe(region, point) {
+    const p = pageAt(point.x, point.y);
+    if (!p) return { short: 'PDF', label: 'the PDF' };
+    const r = p.el.getBoundingClientRect();
+    const words = [];
+    for (const span of p.el.querySelectorAll('.t')) {
+      const b = span.getBoundingClientRect();
+      if (b.right < region.x || b.left > region.x + region.w || b.bottom < region.y || b.top > region.y + region.h) continue;
+      words.push({ top: Math.round(b.top / 4), left: b.left, text: span.textContent.trim() });
+    }
+    words.sort((a, b) => a.top - b.top || a.left - b.left);
+    let text = words.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim();
+    if (text.length > 240) text = text.slice(0, 237) + '…';
+    return {
+      short: `Page ${p.number}`,
+      label: `Page ${p.number} of ${pages.length}`,
+      text,
+      pos: {
+        x: Math.round(Math.min(100, Math.max(0, ((point.x - r.left) / r.width) * 100))),
+        y: Math.round(Math.min(100, Math.max(0, ((point.y - r.top) / r.height) * 100))),
+      },
+    };
+  },
+  idle() {
+    return pending === 0 ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve));
+  },
+};
+
+try {
+  const pdf = await pdfjs.getDocument({
+    url: 'file?doc=' + encodeURIComponent(new URLSearchParams(location.search).get('doc') || ''),
+    cMapUrl: base + 'cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: base + 'standard_fonts/',
+    wasmUrl: base + 'wasm/',
+    iccUrl: base + 'iccs/',
+  }).promise;
+
+  const width = Math.max(320, Math.min(document.documentElement.clientWidth - 40, 920));
+  const observer = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) render(pages.find((p) => p.el === e.target));
+  }, { rootMargin: '900px 0px' });
+
+  let scale = null;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const natural = page.getViewport({ scale: 1 });
+    if (scale === null) scale = width / natural.width;
+    const el = document.createElement('div');
+    el.className = 'page';
+    el.id = `mk-page-${n}`;
+    el.style.width = Math.round(natural.width * scale) + 'px';
+    el.style.height = Math.round(natural.height * scale) + 'px';
+    holder.append(el);
+    const entry = { number: n, el, pdf, scale, state: null };
+    pages.push(entry);
+    observer.observe(el);
+    if (n === 1) msg.remove();
+  }
+} catch (err) {
+  msg.textContent = err && err.name === 'PasswordException'
+    ? 'This PDF is password-protected and cannot be opened here.'
+    : 'Could not open this PDF: ' + (err && err.message ? err.message : err);
+}
+</script>
+</body>
+</html>

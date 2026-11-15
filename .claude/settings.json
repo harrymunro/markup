@@ -4,11 +4,11 @@
       {
         "hooks": [
           {
-            "command": "bd prime --hook-json",
+            "command": "/Users/harry/.claude/hooks/bd-prime-filtered.sh",
             "type": "command"
           }
         ],
-        "matcher": ""
+        "matcher": "startup|clear|compact"
       }
     ]
   }

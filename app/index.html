@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markup</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-tool="pin" class="no-doc">
+
+<header id="bar">
+  <div class="bar-group bar-doc">
+    <button class="btn" id="btn-open" title="Open a file (⌘O)">
+      <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>Open</span>
+    </button>
+    <div id="doc-name" title=""></div>
+    <button class="btn icon" id="btn-reload" title="Reload the page (picks up changes your agent made)">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg>
+    </button>
+  </div>
+
+  <div class="bar-group" id="tools" role="toolbar" aria-label="Tools">
+    <button class="tool" data-tool="interact" title="Use the page normally — click, type, open menus (I)">
+      <svg viewBox="0 0 24 24"><path d="M5 3l14 7.5-6.2 1.8L11 18.5z"/></svg><span>Interact</span>
+    </button>
+    <button class="tool" data-tool="select" title="Select, move and resize your markup (V)">
+      <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span>Move</span>
+    </button>
+    <i class="sep"></i>
+    <button class="tool" data-tool="pin" title="Click an element to comment on it (C)">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5h16v11H10l-4.5 3.5v-3.5H4z"/></svg><span>Comment</span>
+    </button>
+    <button class="tool" data-tool="rect" title="Draw a box (R)">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/></svg><span>Box</span>
+    </button>
+    <button class="tool" data-tool="ellipse" title="Draw a circle (O)">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.8" ry="6.8"/></svg><span>Circle</span>
+    </button>
+    <button class="tool" data-tool="arrow" title="Draw an arrow (A)">
+      <svg viewBox="0 0 24 24"><path d="M5 19L19 5M11 5h8v8"/></svg><span>Arrow</span>
+    </button>
+    <button class="tool" data-tool="pen" title="Draw freehand (P)">
+      <svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L16.5 4.1a1.5 1.5 0 0 1 2.1 0l1.3 1.3a1.5 1.5 0 0 1 0 2.1L8.6 18.8z"/></svg><span>Draw</span>
+    </button>
+    <button class="tool" data-tool="text" title="Type a note anywhere (T)">
+      <svg viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg><span>Text</span>
+    </button>
+  </div>
+
+  <div class="bar-group" id="colors" role="radiogroup" aria-label="Markup colour"></div>
+
+  <div class="bar-group bar-right">
+    <button class="btn icon" id="btn-undo" title="Undo (⌘Z)" disabled>
+      <svg viewBox="0 0 24 24"><path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 0 1 0 10h-3"/></svg>
+    </button>
+    <button class="btn icon" id="btn-redo" title="Redo (⇧⌘Z)" disabled>
+      <svg viewBox="0 0 24 24"><path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 0 0 0 10h3"/></svg>
+    </button>
+    <select id="viewport" title="Preview width">
+      <option value="fit">Fit window</option>
+      <option value="1440">Desktop · 1440</option>
+      <option value="1280">Laptop · 1280</option>
+      <option value="768">Tablet · 768</option>
+      <option value="390">Phone · 390</option>
+    </select>
+    <button class="btn primary" id="btn-export" title="Save feedback for your agent (⌘E)">Export feedback</button>
+  </div>
+</header>
+
+<main>
+  <section id="stage">
+    <div id="wrap">
+      <iframe id="frame" title="Page being reviewed"></iframe>
+      <div id="overlay">
+        <div id="layer"></div>
+        <div id="hover" class="transient"><span></span></div>
+        <div id="sel" class="transient"></div>
+      </div>
+    </div>
+    <div id="editor" class="transient" hidden>
+      <textarea rows="2" placeholder="What should change here?"></textarea>
+      <div class="editor-hint"><span><kbd>Enter</kbd> save</span><span><kbd>Esc</kbd> skip</span></div>
+    </div>
+
+    <div id="empty">
+      <div class="empty-card">
+        <svg class="empty-art" viewBox="0 0 120 84" aria-hidden="true">
+          <rect x="6" y="6" width="108" height="72" rx="6" class="art-page"/>
+          <rect x="16" y="16" width="44" height="6" rx="3" class="art-line"/>
+          <rect x="16" y="28" width="70" height="4" rx="2" class="art-line"/>
+          <rect x="16" y="36" width="58" height="4" rx="2" class="art-line"/>
+          <rect x="14" y="50" width="34" height="18" rx="3" class="art-mark"/>
+          <path d="M96 30L70 54M70 54l2-11M70 54l11-1" class="art-mark"/>
+        </svg>
+        <h1>Mark up a page</h1>
+        <p>Drop an HTML file, PDF or screenshot here — or</p>
+        <button class="btn primary" id="btn-choose">Choose a file…</button>
+        <div id="recent"></div>
+      </div>
+    </div>
+    <div id="drop-hint">Drop to open</div>
+  </section>
+
+  <aside id="side">
+    <div class="side-head">
+      <h2>Feedback <span id="count"></span></h2>
+      <label class="toggle" title="Show your notes next to each mark on the page"><input type="checkbox" id="labels" checked> Notes on page</label>
+    </div>
+    <textarea id="general" rows="2" placeholder="Overall feedback (optional) — anything that isn’t about one spot on the page"></textarea>
+    <div id="list"></div>
+    <div id="side-empty">
+      <p><b>Nothing marked yet.</b></p>
+      <p>Pick a tool, then click or drag on the page. Each mark gets a number and a note, and your agent receives them with the matching element and a screenshot.</p>
+    </div>
+    <div class="side-foot">
+      <button class="link" id="btn-clear">Clear all</button>
+    </div>
+  </aside>
+</main>
+
+<div id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title">Feedback saved</h2>
+    <p id="modal-sub"></p>
+    <div class="modal-path"><code id="modal-path"></code></div>
+    <label class="modal-row" id="modal-where-row">Save to
+      <select id="modal-where">
+        <option value="source">a “markup-feedback” folder next to the file</option>
+        <option value="downloads">Downloads › markup-feedback</option>
+      </select>
+    </label>
+    <div class="modal-prompt">
+      <div class="modal-label">Prompt for your agent</div>
+      <p id="modal-prompt"></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy prompt</button>
+      <button class="btn" id="modal-reveal">Show in Finder</button>
+      <a class="btn" id="modal-zip" href="api/export.zip" download>Download .zip</a>
+      <span class="spacer"></span>
+      <button class="btn" id="modal-close">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="busy" hidden><div class="busy-card"><i class="spinner"></i><span id="busy-text">Working…</span></div></div>
+<div id="toast" hidden></div>
+<input type="file" id="file-input" hidden accept=".html,.htm,.xhtml,.pdf,image/*">
+
+<script src="app.js"></script>
+</body>
+</html>

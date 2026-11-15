@@ -1,3 +1,11 @@
+# Built Dock launcher (scripts/build-app.sh bakes this checkout's path into it)
+Markup.app/
+
+# Feedback exported while reviewing files in this repo
+markup-feedback/
+
+.DS_Store
+node_modules/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

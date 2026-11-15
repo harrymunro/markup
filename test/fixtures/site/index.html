@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme Cloud</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="site">
+    <span class="logo">Acme Cloud</span>
+    <nav>
+      <a href="#pricing">Pricing</a>
+      <a href="about.html">About</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h1 class="hero-title">Ship faster with Acme</h1>
+    <p>Deploy your apps in seconds, not days. No servers to manage.</p>
+    <a class="btn" id="cta" href="#pricing">Get started</a>
+    <button class="btn ghost" id="open-dialog">Watch demo</button>
+  </section>
+
+  <main>
+    <section class="cards" id="pricing">
+      <article class="card">
+        <h3>Starter</h3>
+        <div class="price">$9</div>
+        <p>For side projects.</p>
+      </article>
+      <article class="card">
+        <h3>Team</h3>
+        <div class="price">$49</div>
+        <p>For growing teams.</p>
+      </article>
+      <article class="card">
+        <h3>Scale</h3>
+        <div class="price">$199</div>
+        <p>For serious traffic.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="scroller" id="activity">
+        <ul></ul>
+      </div>
+      <div class="card">
+        <h3>Why Acme?</h3>
+        <p>Because your time matters more than your infrastructure.</p>
+        <input type="email" placeholder="you@example.com" aria-label="Email">
+      </div>
+    </section>
+
+    <div class="spacer">More content down here</div>
+    <p id="contact" class="contact-line">Questions? Email <a href="mailto:hello@acme.test">hello@acme.test</a></p>
+  </main>
+
+  <footer>© 2026 Acme Cloud</footer>
+
+  <dialog id="demo">
+    <h2>Demo video</h2>
+    <p class="dialog-copy">The demo video would play here.</p>
+    <button class="btn" id="close-dialog">Close</button>
+  </dialog>
+
+  <script>
+    const ul = document.querySelector('#activity ul');
+    for (let i = 1; i <= 30; i++) { const li = document.createElement('li'); li.textContent = 'Deploy #' + i + ' succeeded'; li.className = 'row'; ul.append(li); }
+    const dlg = document.getElementById('demo');
+    document.getElementById('open-dialog').onclick = () => dlg.showModal();
+    document.getElementById('close-dialog').onclick = () => dlg.close();
+  </script>
+</body>
+</html>
