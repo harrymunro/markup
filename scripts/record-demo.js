@@ -48,6 +48,19 @@ const CSS = `
 #demo-card .pane header { font: 600 13px ui-monospace, Menlo, monospace; color: #9aa3b5; padding: 9px 14px; border-bottom: 1px solid #2d3545; }
 #demo-card pre { margin: 0; padding: 14px; font: 12.5px/1.55 ui-monospace, Menlo, monospace; color: #dfe5f1; white-space: pre-wrap; overflow: hidden; }
 #demo-card .shots { display: grid; grid-template-rows: 1.5fr 1fr; gap: 22px; min-height: 0; }
+#demo-card .dock-scene { position: absolute; inset: 0; background: linear-gradient(160deg, #1b2a4a, #3a2a55 60%, #5a2f4a); text-align: center; }
+#demo-card .dock-scene h2 { font-size: 40px; letter-spacing: -.8px; margin: 62px 0 12px; }
+#demo-card .dock-scene p { font-size: 20px; color: #d5daE6; margin: 0; }
+#demo-card .dock-scene code { font: 500 17px ui-monospace, Menlo, monospace; background: rgba(0,0,0,.3); padding: 3px 9px; border-radius: 7px; }
+#demo-card .finder { position: absolute; left: 430px; top: 230px; width: 420px; height: 230px; background: #f4f5f7; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.45); overflow: hidden; color: #1b1e25; }
+#demo-card .finder header { background: #e3e5ea; font: 600 14px -apple-system, sans-serif; padding: 10px; border-bottom: 1px solid #cfd2d9; }
+#demo-card .finder .file { display: inline-block; margin-top: 38px; font: 500 14px -apple-system, sans-serif; }
+#demo-card .finder .file img { display: block; width: 76px; height: 76px; margin: 0 auto 8px; }
+#demo-card .dock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 24px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); }
+#demo-card .dock i { width: 64px; height: 64px; border-radius: 15px; background: rgba(255,255,255,.32); }
+#demo-card .dock b { width: 0; height: 64px; margin-left: -12px; }
+#demo-card .dock b img { width: 64px; height: 64px; display: block; }
+#demo-drag { position: fixed; left: 0; top: 0; width: 68px; height: 68px; margin: -34px 0 0 -34px; z-index: 2147483646; pointer-events: none; opacity: .92; }
 #demo-card .pane img { width: 100%; height: 100%; object-fit: contain; background: #0b0d12; min-height: 0; }
 `;
 
@@ -203,6 +216,33 @@ const CSS = `
       <div class="pane"><header>annotation-01.png</header><img src="${img('annotation-01.png')}"></div></div></div>`);
     await sleep(500);
     await hold(5.5);
+
+    // 7. The Dock. This scene is an illustration: the real Dock is outside the browser
+    // window, so it cannot be filmed from headless Chrome.
+    await card(`<div class="dock-scene"><h2>On a Mac, keep it in the Dock</h2>
+      <p>Run <code>scripts/build-app.sh</code>, then drag <b>Markup.app</b> onto the Dock. One click opens it.</p>
+      <div class="finder"><header>html-markup</header><div class="file"><img id="dk-src" src="${icon}"><span>Markup.app</span></div></div>
+      <div class="dock"><i></i><i></i><i></i><b id="dk-slot"></b><i></i><i></i></div></div>`);
+    await ev(`document.querySelector('#demo-cursor').style.display = '', 0`);
+    await sleep(200);
+    await hold(1.3);
+    const src = await at('#dk-src');
+    await glide(src.x, src.y, 800);
+    await press(true); await snap(0.2);
+    await ev(`document.body.insertAdjacentHTML('beforeend', '<img id="demo-drag" class="transient" src="${icon}">'), 0`);
+    const N = 34;
+    for (let i = 1; i <= N; i++) {
+      const e = ease(i / N), open = Math.min(1, Math.max(0, (i / N - 0.45) / 0.4));
+      const slot = await ev(`(() => { const b = document.querySelector('#dk-slot'); b.style.width = '${(64 * open).toFixed(1)}px'; b.style.marginLeft = '${(-12 * (1 - open)).toFixed(1)}px'; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      cx = src.x + (slot.x - src.x) * e; cy = src.y + (slot.y - src.y) * e;
+      await ev(`document.querySelector('#demo-drag').style.transform = 'translate(${cx}px, ${cy}px)', 0`);
+      await cursor(cx, cy);
+      await snap();
+    }
+    await ev(`(() => { document.querySelector('#demo-drag').remove(); document.querySelector('#dk-slot').innerHTML = '<img src="${icon}">'; })()`);
+    await press(false); await snap(0.3);
+    await glide(cx + 90, cy - 110, 500);
+    await hold(2.2);
 
     // End card
     await card(`<div class="title"><img src="${icon}"><h1>Markup</h1><p>Open source. Runs locally. No install step.</p><code>github.com/harrymunro/html-markup</code></div>`);
