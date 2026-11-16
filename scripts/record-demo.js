@@ -221,7 +221,7 @@ const CSS = `
     // window, so it cannot be filmed from headless Chrome.
     await card(`<div class="dock-scene"><h2>On a Mac, keep it in the Dock</h2>
       <p>Run <code>scripts/build-app.sh</code>, then drag <b>Markup.app</b> onto the Dock. One click opens it.</p>
-      <div class="finder"><header>html-markup</header><div class="file"><img id="dk-src" src="${icon}"><span>Markup.app</span></div></div>
+      <div class="finder"><header>markup</header><div class="file"><img id="dk-src" src="${icon}"><span>Markup.app</span></div></div>
       <div class="dock"><i></i><i></i><i></i><b id="dk-slot"></b><i></i><i></i></div></div>`);
     await ev(`document.querySelector('#demo-cursor').style.display = '', 0`);
     await sleep(200);
@@ -245,7 +245,7 @@ const CSS = `
     await hold(2.2);
 
     // End card
-    await card(`<div class="title"><img src="${icon}"><h1>Markup</h1><p>Open source. Runs locally. No install step.</p><code>github.com/harrymunro/html-markup</code></div>`);
+    await card(`<div class="title"><img src="${icon}"><h1>Markup</h1><p>Open source. Runs locally. No install step.</p><code>github.com/harrymunro/markup</code></div>`);
     await sleep(200);
     await hold(3.2);
 

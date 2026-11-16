@@ -19,8 +19,8 @@ testing, so reports are welcome.
 ## Get it
 
 ```sh
-git clone https://github.com/harrymunro/html-markup.git
-cd html-markup
+git clone https://github.com/harrymunro/markup.git
+cd markup
 ./markup test/fixtures/site/index.html   # try it on the sample page
 ```
 

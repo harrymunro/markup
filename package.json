@@ -1,5 +1,5 @@
 {
-  "name": "html-markup",
+  "name": "markup",
   "version": "1.0.0",
   "description": "Draw feedback on an HTML page, PDF or screenshot and export it for an AI coding agent.",
   "private": true,
@@ -15,13 +15,13 @@
     "node": ">=18"
   },
   "author": "Harry Munro",
-  "homepage": "https://github.com/harrymunro/html-markup#readme",
+  "homepage": "https://github.com/harrymunro/markup#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/harrymunro/html-markup.git"
+    "url": "git+https://github.com/harrymunro/markup.git"
   },
   "bugs": {
-    "url": "https://github.com/harrymunro/html-markup/issues"
+    "url": "https://github.com/harrymunro/markup/issues"
   },
   "keywords": [
     "ai",
