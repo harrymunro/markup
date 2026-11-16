@@ -456,8 +456,10 @@ async function start(opts = {}) {
     }
     const md = path.join(dir, 'feedback.md');
     const source = doc.path || doc.name;
-    const prompt = `I've marked up \`${source}\` with visual feedback. Read \`${md}\` — it lists each numbered annotation with my note, the element it targets and a screenshot — then look at the screenshots it references (same folder) and make the changes.`;
-    return { dir, md, files: names, where, prompt, canChooseLocation: !!doc.path };
+    const n = payload.points;
+    // Naming the count and asking for an answer per point is what makes a skipped one show.
+    const prompt = `I've marked up \`${source}\` with visual feedback. Read \`${md}\` — it ${n ? `opens with a checklist of the ${countOf(n)} to act on, then gives` : 'lists'} each numbered annotation with my note, the element it targets and a screenshot. Look at the screenshots it references (same folder) and make the changes. ${reportBack(n, 'me')}`;
+    return { dir, md, files: names, where, prompt, points: n, canChooseLocation: !!doc.path };
   }
 
   function removeExport(exp) {
@@ -627,6 +629,7 @@ async function start(opts = {}) {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const payload = {
         stamp: stamp(),
+        points: Number.isInteger(body.points) && body.points > 0 ? body.points : 0,
         files: [
           { name: 'feedback.md', data: Buffer.from(String(body.markdown), 'utf8') },
           ...body.files.map((f) => ({ name: f.name, data: Buffer.from(f.data, 'base64') })),
@@ -637,10 +640,10 @@ async function start(opts = {}) {
       exported = true;
       log(`Feedback saved: ${result.md}`);
       json(res, publicExport());
-      for (const w of waiters) json(w.res, { md: result.md, dir: result.dir, source: doc.path || doc.name });
+      for (const w of waiters) json(w.res, { md: result.md, dir: result.dir, source: doc.path || doc.name, points: result.points });
       waiters.clear();
       if (opts.wait) {
-        process.stdout.write(waitMessage(result.md, doc.path || doc.name));
+        process.stdout.write(waitMessage(result.md, doc.path || doc.name, result.points));
         setTimeout(() => stop(0), 1500);
       }
       return;
@@ -679,8 +682,8 @@ async function start(opts = {}) {
   }
 
   function publicExport() {
-    const { dir, md, files, where, prompt, canChooseLocation, sent } = lastExport;
-    return { dir, md, files, where, prompt, canChooseLocation, wait: !!opts.wait, sent: !!sent };
+    const { dir, md, files, where, prompt, points, canChooseLocation, sent } = lastExport;
+    return { dir, md, files, where, prompt, points, canChooseLocation, wait: !!opts.wait, sent: !!sent };
   }
 
   // ── server
@@ -788,10 +791,6 @@ async function start(opts = {}) {
 
   try { writeJSON(INSTANCE_FILE, { port, token, pid: process.pid }); fs.chmodSync(INSTANCE_FILE, 0o600); } catch { /* non-fatal */ }
 
-  function waitMessage(md, source) {
-    return `Feedback file: ${md}\nThe user marked up ${source}. Read the feedback file above and the screenshots it references (same folder), then act on the feedback.\n`;
-  }
-
   async function stop(code = 0) {
     if (stopping) return;
     stopping = true;
@@ -821,6 +820,21 @@ async function start(opts = {}) {
 }
 
 // ───────────────────────────────────────────────────────────── command line
+
+const countOf = (n) => `${n} point${n === 1 ? '' : 's'}`;
+
+/** The closing instruction given to the agent: every point gets an answer, so none goes missing quietly. */
+function reportBack(points, who) {
+  return points > 1
+    ? `Act on every point, and when you finish report back on each one by number: done, not done (and why), or a question for ${who}.`
+    : `When you finish, report back on what you did: done, not done (and why), or a question for ${who}.`;
+}
+
+/** What `markup --wait` prints for the agent that ran it. */
+function waitMessage(md, source, points) {
+  return `Feedback file: ${md}\nThe user marked up ${source}. Read the feedback file above and the screenshots it references (same folder), then act on the feedback.` +
+    `${points ? ` It opens with a checklist of the ${countOf(points)} to act on.` : ''} ${reportBack(points, 'the user')}\n`;
+}
 
 const HELP = `Markup ${VERSION} — draw feedback on a page and hand it to your AI agent.
 
@@ -883,7 +897,7 @@ async function main() {
       if (r.status === 200) {
         if (opts.wait) {
           if (r.body.md) {
-            process.stdout.write(`Feedback file: ${r.body.md}\nThe user marked up ${r.body.source}. Read the feedback file above and the screenshots it references (same folder), then act on the feedback.\n`);
+            process.stdout.write(waitMessage(r.body.md, r.body.source, r.body.points));
             return;
           }
           console.error('The Markup window was closed without exporting feedback.');
@@ -914,6 +928,6 @@ async function main() {
   process.on('SIGTERM', () => app.stop(opts.wait ? 1 : 0));
 }
 
-module.exports = { start, annotateLines, makeZip, CDP, findChrome };
+module.exports = { start, annotateLines, makeZip, CDP, findChrome, waitMessage };
 
 if (require.main === module) main();

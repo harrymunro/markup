@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const assert = require('assert');
 const { launch } = require('./driver.js');
+const { waitMessage } = require('../server.js');
 
 const outDir = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'markup-smoke-'));
 fs.mkdirSync(outDir, { recursive: true });
@@ -113,6 +114,42 @@ const TOP = 50; // toolbar height: stage coordinates start below it
     assert.strictEqual((await anns()).length, 8, 'undo of a move keeps all marks');
     await wheel(700, 500, -2000);
 
+    // a click while a note is open only closes it, and a comment left empty is not kept
+    await tool('pin');
+    r = await rectOf('.hero-title');
+    await click(r.x + r.w / 2, TOP + r.y + r.h / 2);
+    await waitFor('!document.querySelector("#editor").hidden');
+    assert.strictEqual((await anns()).length, 9, 'the comment exists while its note is open');
+    r = await rectOf('#cta');
+    await click(r.x + r.w / 2, TOP + r.y + r.h / 2);
+    await sleep(100);
+    assert.ok(await ev('document.querySelector("#editor").hidden'), 'clicking away closes the note');
+    assert.strictEqual((await anns()).length, 8, 'clicking away from an empty comment leaves no mark behind');
+    assert.strictEqual(await ev('window.__mk.S.nextN'), 9, 'and its number is free again');
+
+    // 9 — a second comment on the same element as 1
+    await click(r.x + r.w / 2, TOP + r.y + r.h / 2);
+    await note('Brand blue is #0b5fff');
+
+    // 10, 11 — two comments on an element taller than the viewport: one thought in two marks
+    await frame(`(d.querySelector('.spacer').style.height = '1500px', 0)`);
+    await wheel(700, 500, 1100);
+    r = await rectOf('.spacer');
+    const sy = TOP + Math.max(r.y, 0);
+    await click(r.x + 60, sy + 200);
+    await note('Rename this section');
+    await click(r.x + 300, sy + 320);
+    await note('New name: Roadmap');
+
+    // 12 — a box with no note
+    await tool('rect');
+    await drag(r.x + 400, sy + 100, r.x + 560, sy + 180);
+    await waitFor('!document.querySelector("#editor").hidden');
+    await key('Escape');
+    await sleep(350);
+    assert.strictEqual((await anns()).length, 12, 'a shape may stay without a note');
+    await wheel(700, 500, -3000);
+
     await ev(`(document.querySelector('#general').value = 'Overall: looks good, tighten the spacing.', 0)`);
     await shot(path.join(outDir, '4-before-export.png'));
 
@@ -126,7 +163,12 @@ const TOP = 50; // toolbar height: stage coordinates start below it
     assert.ok(list[7].crop, 'dialog mark keeps its close-up');
     assert.ok(moved, 'move happened');
 
-    await ev(`window.__mk.exportFeedback()`);
+    // exporting with a note-less mark asks first
+    await ev(`(window.__mk.exportFeedback(), 0)`);
+    await waitFor(`!document.querySelector('#ask').hidden`);
+    assert.strictEqual(await ev(`document.querySelector('#ask-title').textContent`), '1 mark has no note');
+    await shot(path.join(outDir, '4b-ask.png'));
+    await ev(`(document.querySelector('#ask [data-value="keep"]').click(), 0)`);
     await waitFor(`!document.querySelector('#modal').hidden`, 30000);
     await shot(path.join(outDir, '5-exported.png'));
     const exp = t.app.lastExport;
@@ -137,6 +179,34 @@ const TOP = 50; // toolbar height: stage coordinates start below it
     assert.ok(md.includes('index.html:22'), 'source line reference present');
     assert.ok(exp.files.includes('overview-1.png') && exp.files.includes('annotation-08.png'));
     assert.ok(fs.existsSync(path.join(path.dirname(exp.dir), '.gitignore')));
+
+    // the checklist counts notes, not marks, and the prompt asks for an answer per point
+    assert.ok(md.includes('**Points to act on:** 12 (11 numbered notes plus the overall feedback)'), 'header counts the points');
+    assert.ok(md.includes('- [ ] **Overall:** Overall: looks good'), 'overall feedback is a checklist item');
+    assert.ok(/- \[ \] \*\*1\*\* \(`a#cta`\): Make this button bigger.*same element as 9: read together/.test(md), 'checklist line names the element and its sibling mark');
+    assert.ok(md.includes('- **Same element as:** annotation 10. These may be one instruction'), 'marks on one element point at each other');
+    assert.ok(!md.split('### 2. ')[1].split('###')[0].includes('Same element'), 'a box around two cards is not the same target as a box around one');
+    assert.ok(md.includes('## Marks without a note') && md.includes('### 12. Box (red), no note'), 'note-less marks are listed apart');
+    assert.ok(!/\[ \] \*\*12\*\*/.test(md), 'and are not in the checklist');
+    assert.ok(exp.prompt.includes('checklist of the 12 points') && exp.prompt.includes('report back on each one by number'), 'prompt states the count and asks for a report');
+    assert.strictEqual(exp.points, 12);
+    assert.ok(waitMessage('/x/feedback.md', '/x/index.html', 12).includes('checklist of the 12 points'), '--wait output states the count too');
+
+    // marks on one tall element share an overview and a close-up instead of repeating them
+    const ctx = (n) => (md.split(`### ${n}. `)[1].match(/in context: `(overview-\d+\.png)`/) || [])[1];
+    assert.ok(ctx(10) && ctx(10) === ctx(11), `marks 10 and 11 share an overview (${ctx(10)}, ${ctx(11)})`);
+    assert.ok(md.includes('`annotation-10.png`, the same close-up as annotation 10'), 'identical close-ups are saved once');
+    assert.ok(!exp.files.includes('annotation-11.png'));
+
+    // exporting again and choosing to remove the note-less mark
+    await ev(`(document.querySelector('#modal').hidden = true, 0)`);
+    await ev(`(window.__mk.exportFeedback(), 0)`);
+    await waitFor(`!document.querySelector('#ask').hidden`);
+    await ev(`(document.querySelector('#ask [data-value="remove"]').click(), 0)`);
+    await waitFor(`!document.querySelector('#modal').hidden`, 30000);
+    const md2 = fs.readFileSync(t.app.lastExport.md, 'utf8');
+    assert.strictEqual((await anns()).length, 11, 'the note-less mark was removed');
+    assert.ok(!md2.includes('Marks without a note') && md2.includes('**Points to act on:** 12'), 'second export has only the points');
 
     assert.deepStrictEqual(t.errors, [], 'no console errors');
     console.log('\nOK — screenshots in', outDir);

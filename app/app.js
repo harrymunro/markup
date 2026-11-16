@@ -29,7 +29,7 @@ const SKIP_TAGS = new Set(['script', 'style', 'link', 'meta', 'br', 'wbr', 'temp
 const ui = {
   frame: $('#frame'), wrap: $('#wrap'), stage: $('#stage'), overlay: $('#overlay'), layer: $('#layer'),
   hover: $('#hover'), sel: $('#sel'), editor: $('#editor'), editorText: $('#editor textarea'),
-  list: $('#list'), general: $('#general'), count: $('#count'), modal: $('#modal'),
+  list: $('#list'), general: $('#general'), count: $('#count'), modal: $('#modal'), ask: $('#ask'),
 };
 
 const S = {
@@ -690,7 +690,7 @@ function openEditor(a, isNew) {
   closeEditor(true);
   S.editing = { a, isNew, before: snapshot(), beforeNote: a.note };
   ui.editorText.value = a.note;
-  ui.editorText.placeholder = a.type === 'text' ? 'Type your note…' : 'What should change here? (optional)';
+  ui.editorText.placeholder = a.type === 'text' ? 'Type your note…' : a.type === 'pin' ? 'What should change here?' : 'What should change here? (optional)';
   ui.editor.hidden = false;
   placeEditor();
   ui.editorText.focus();
@@ -705,8 +705,9 @@ function closeEditor(commit) {
   const a = ed.a;
   if (!S.anns.includes(a)) return;
   const value = ui.editorText.value.trim();
-  if (a.type === 'text' && ed.isNew && (!commit || !value)) {
-    // An empty text note is nothing: take it back out and forget it was ever added.
+  if ((a.type === 'text' || a.type === 'pin') && ed.isNew && (!commit || !value)) {
+    // A text note or comment with nothing written is nothing: take it back out and forget
+    // it was ever added. (Shapes can stand on their own, so they stay.)
     dropAnn(a);
     S.undo.pop();
     if (a.n === S.nextN - 1) S.nextN--;
@@ -827,6 +828,9 @@ ui.overlay.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || !S.doc || S.exporting) return;
   const p = pt(e);
   const handle = e.target.closest('.handle');
+  // With a note open, a click on the page only closes it. Otherwise every "click away"
+  // with the comment tool leaves another mark behind.
+  const dismissing = !!S.editing && (S.tool === 'pin' || S.tool === 'text');
   closeEditor(true);
   if (!fdoc()) return;
   e.preventDefault();
@@ -852,6 +856,8 @@ ui.overlay.addEventListener('pointerdown', (e) => {
     ui.overlay.setPointerCapture(e.pointerId);
     return;
   }
+
+  if (dismissing) return;
 
   if (S.tool === 'pin') {
     const target = elAt(p.x, p.y);
@@ -1030,6 +1036,7 @@ function onKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); exportFeedback(); return; }
   if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); chooseFile(); return; }
+  if (!ui.ask.hidden) return;
   if (!ui.modal.hidden) { if (e.key === 'Escape') closeModal(); return; }
   if (typing) return;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
@@ -1195,16 +1202,27 @@ async function captureAll() {
   await settle();
   const todo = S.anns.filter((a) => a._show);
   const done = new Set();
+  const boxKey = (b) => { const v = vbox(b); return [v.x, v.y, v.w, v.h].map(Math.round).join(','); };
   const shoot = async (lead) => {
     const bmp = await grab();
-    const blob = await cropOf(bmp, { x: 0, y: 0, w: S.W, h: S.H }, 1600);
-    if (blob) {
-      overviews.push({ blob, nums: S.anns.filter((b) => b._show && touchesView(b)).map((b) => b.n) });
+    // A mark bigger than the viewport never counts as "in view", so each one leads its own
+    // shot. If an earlier overview already has it in exactly this place, that is the same
+    // picture: reuse it rather than saving it again.
+    let index = lead ? overviews.findIndex((o) => o.boxes.get(lead) === boxKey(lead)) + 1 : 0;
+    if (!index) {
+      const blob = await cropOf(bmp, { x: 0, y: 0, w: S.W, h: S.H }, 1600);
+      if (blob) {
+        const shown = S.anns.filter((b) => b._show && touchesView(b));
+        overviews.push({ blob, nums: shown.map((b) => b.n), boxes: new Map(shown.map((b) => [b, boxKey(b)])) });
+        index = overviews.length;
+      }
+    }
+    if (index) {
       for (const b of todo) {
         if (done.has(b) || !b._show || !(b === lead || inView(b))) continue;
         const rect = cropRect(b);
         if (rect) b.crop = (await cropOf(bmp, rect, 1400)) || b.crop;
-        b.overview = overviews.length;
+        b.overview = index;
         retarget(b);
         done.add(b);
       }
@@ -1261,20 +1279,63 @@ function targetLines(a) {
   return L;
 }
 
+const hasNote = (a) => !!a.note.trim();
+const shotFile = (n) => `annotation-${String(n).padStart(2, '0')}.png`;
+const numList = (list) => list.map((b) => b.n).join(', ');
+
+/** What an export amounts to: the points an agent must act on, and the marks left without a note. */
+function tally() {
+  const noted = S.anns.filter(hasNote);
+  const general = ui.general.value.trim();
+  return { noted, bare: S.anns.filter((a) => !hasNote(a)), general, points: noted.length + (general ? 1 : 0) };
+}
+
+/** Other marks made on the very same element: often one thought spread over several marks. */
+function sameElement(a) {
+  // Only a mark about exactly one element has "its" element; a box around several does not.
+  const key = (m) => {
+    const t = m.targets;
+    const it = t && t.items[0];
+    return it && it.selector && !it.whole && !it.viewer && !(t.total > 1) ? it.selector : null;
+  };
+  const mine = key(a);
+  return mine ? S.anns.filter((b) => b !== a && b.page === a.page && key(b) === mine) : [];
+}
+
+function oneLine(text, max = 110) {
+  const flat = text.trim().replace(/\s+/g, ' ');
+  return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat;
+}
+
 function buildMarkdown(overviews, shotNames) {
   const doc = S.doc;
   const now = new Date();
   const when = now.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   const mainPage = doc.kind === 'html' ? doc.url : null;
-  const general = ui.general.value.trim();
+  const { noted, bare, general, points } = tally();
   const thing = doc.kind === 'pdf' ? 'PDF' : doc.kind === 'image' ? 'image' : 'page';
   const L = [];
   L.push(`# Visual feedback on ${code(doc.name)}`, '');
   L.push(`- **Source file:** ${doc.path ? code(doc.path) : `${code(doc.name)} (opened by upload, original location unknown)`}`);
   L.push(`- **Reviewed:** ${when}, in a ${S.W}×${S.H}px viewport`);
-  L.push(`- **Annotations:** ${S.anns.length}${S.anns.length ? ' — numbers match the numbered marks in the screenshots' : ''}`, '');
-  L.push(`The user reviewed this ${thing} in a browser and drew numbered marks on it. Each annotation below gives the user's note (the feedback to act on), what the mark refers to, and a close-up screenshot of the mark in place.` +
+  if (points) L.push(`- **Points to act on:** ${points} (${[noted.length ? plural(noted.length, 'numbered note') : '', general ? 'the overall feedback' : ''].filter(Boolean).join(' plus ')})`);
+  if (bare.length) L.push(`- **Marks without a note:** ${bare.length}, listed at the end`);
+  L.push('');
+  L.push(`The user reviewed this ${thing} in a browser and drew numbered marks on it; the numbers match the numbered marks in the screenshots. Each annotation below gives the user's note (the feedback to act on), what the mark refers to, and a close-up screenshot of the mark in place.` +
     (doc.kind === 'html' ? ' Tags, selectors and `file:line` references were captured automatically to help you find the code; line numbers refer to the file as it was when reviewed.' : ''), '');
+
+  if (points) {
+    L.push('## Checklist', '');
+    L.push(`${points === 1 ? 'There is 1 point' : `There are ${points} points`} to act on. Each is a separate piece of feedback unless it says it belongs with another. Work through every one, using the details further down, and when you finish report back on each by number: done, not done (with the reason), or a question for the user.`, '');
+    if (general) L.push(`- [ ] **Overall:** ${oneLine(general)}`);
+    for (const a of noted) {
+      const where = whereText(a);
+      const mates = sameElement(a).filter(hasNote);
+      L.push(`- [ ] **${a.n}**${where ? ` (${code(where)})` : ''}: ${oneLine(a.note)}` + (mates.length ? ` _(same element as ${numList(mates)}: read together)_` : ''));
+    }
+    L.push('');
+  }
+
   if (general) L.push('## Overall feedback', '', quote(general), '');
   if (overviews.length) {
     L.push('## Overview screenshots', '');
@@ -1283,17 +1344,37 @@ function buildMarkdown(overviews, shotNames) {
     });
     L.push('');
   }
-  if (S.anns.length) L.push('## Annotations', '');
-  for (const a of S.anns) {
-    L.push(`### ${a.n}. ${KIND[a.type]} (${a.color.name})`, '');
-    L.push(a.note.trim() ? quote(a.note.trim()) : '_No note — the mark itself is the feedback; look at the screenshot._', '');
+
+  const details = (a) => {
     L.push(...targetLines(a));
+    const mates = sameElement(a);
+    const withNotes = mates.filter(hasNote);
+    if (withNotes.length && hasNote(a)) L.push(`- **Same element as:** annotation${withNotes.length === 1 ? '' : 's'} ${numList(withNotes)}. These may be one instruction written across several marks; read them together.`);
+    else if (mates.length && !hasNote(a)) L.push(`- **Same element as:** annotation${mates.length === 1 ? '' : 's'} ${numList(mates)}`);
     if (mainPage && a.page && a.page !== mainPage) L.push(`- **On page:** ${code(a.page)}`);
     if (a.vw && a.vw !== S.W) L.push(`- **Viewport when marked:** ${a.vw}px wide`);
     const shot = shotNames.get(a);
-    if (shot) L.push(`- **Screenshot:** ${code(shot)}${a.overview ? ` (in context: ${code(`overview-${a.overview}.png`)})` : ''}`);
+    if (shot) {
+      L.push(`- **Screenshot:** ${code(shot.name)}` + (shot.n !== a.n ? `, the same close-up as annotation ${shot.n}` : '') + (a.overview ? ` (in context: ${code(`overview-${a.overview}.png`)})` : ''));
+    }
     if (!a._show) L.push('- _This mark was not visible when the feedback was exported (for example it sits in a dialog that was closed, or on another page)' + (shot ? '; its screenshot is from when the mark was made._' : ', so it has no screenshot._'));
     L.push('');
+  };
+
+  if (noted.length) L.push('## Annotations', '');
+  for (const a of noted) {
+    L.push(`### ${a.n}. ${KIND[a.type]} (${a.color.name})`, '');
+    L.push(quote(a.note.trim()), '');
+    details(a);
+  }
+
+  if (bare.length) {
+    L.push('## Marks without a note', '');
+    L.push(`The user drew ${bare.length === 1 ? 'this mark' : `these ${bare.length} marks`} but wrote nothing${points ? `, so ${bare.length === 1 ? 'it is' : 'they are'} not in the checklist` : ''}. A mark like this may be emphasis for a note nearby, or its screenshot may make the intent plain. Where it does not, do not guess at a change: say in your report that the mark was unclear.`, '');
+    for (const a of bare) {
+      L.push(`### ${a.n}. ${KIND[a.type]} (${a.color.name}), no note`, '');
+      details(a);
+    }
   }
   return L.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
@@ -1305,11 +1386,70 @@ const toBase64 = (blob) => new Promise((resolve, reject) => {
   fr.readAsDataURL(blob);
 });
 
+/** A small in-page question. Resolves with the chosen value, or null if dismissed. */
+function ask(title, text, choices) {
+  return new Promise((resolve) => {
+    const done = (value) => {
+      ui.ask.hidden = true;
+      ui.ask.onpointerdown = ui.ask.onkeydown = null;
+      resolve(value);
+    };
+    $('#ask-title').textContent = title;
+    $('#ask-text').textContent = text;
+    const actions = $('#ask-actions');
+    actions.textContent = '';
+    for (const c of choices) {
+      actions.append(h('button', { class: c.primary ? 'btn primary' : 'btn', 'data-value': c.value, onclick: () => done(c.value) }, c.label));
+    }
+    ui.ask.onpointerdown = (e) => { if (e.target === ui.ask) done(null); };
+    ui.ask.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(null); } };
+    ui.ask.hidden = false;
+    (actions.querySelector('.primary') || actions.firstChild).focus();
+  });
+}
+
+/**
+ * An agent can only guess at a mark with no note, and a pile of them buries the real
+ * feedback, so check before sending any. Returns false if the user went back to add notes.
+ */
+async function settleBareMarks() {
+  const { bare, noted } = tally();
+  if (!bare.length) return true;
+  const n = bare.length;
+  const choice = await ask(
+    n === 1 ? '1 mark has no note' : `${n} marks have no note`,
+    `${n === 1 ? `Mark ${bare[0].n} has` : `Marks ${numList(bare)} have`} nothing written, so your agent can only guess what ${n === 1 ? 'it means' : 'they mean'}. ` +
+      (noted.length ? `The ${plural(noted.length, 'mark')} with a note will be sent either way.` : 'Notes make the feedback much easier to act on.'),
+    [
+      { label: n === 1 ? 'Add a note' : 'Add notes', value: 'edit', primary: true },
+      { label: n === 1 ? 'Remove it and export' : 'Remove them and export', value: 'remove' },
+      { label: 'Export as it is', value: 'keep' },
+    ],
+  );
+  if (choice === 'keep') return true;
+  if (choice === 'remove') {
+    pushUndo();
+    for (const a of bare) dropAnn(a);
+    renderSide();
+    return true;
+  }
+  if (choice === 'edit' && S.anns.includes(bare[0])) {
+    select(bare[0]);
+    await reveal(bare[0]);
+    const field = cardOf(bare[0]) && cardOf(bare[0]).querySelector('textarea');
+    if (field) field.focus();
+  }
+  return false;
+}
+
 async function exportFeedback() {
-  if (!S.doc || S.exporting) return;
+  if (!S.doc || S.exporting || !ui.ask.hidden) return;
   closeEditor(true);
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-  if (!S.anns.length && !ui.general.value.trim()) { toast('Nothing to export yet — add a mark or some overall feedback first.'); return; }
+  const nothing = () => !S.anns.length && !ui.general.value.trim();
+  if (nothing()) { toast('Nothing to export yet — add a mark or some overall feedback first.'); return; }
+  if (!(await settleBareMarks())) return;
+  if (nothing()) { toast('Nothing left to export — add a mark or some overall feedback first.'); return; }
   S.exporting = true;
   select(null);
   busy('Capturing screenshots…');
@@ -1318,14 +1458,20 @@ async function exportFeedback() {
     const files = [];
     const shotNames = new Map();
     for (let i = 0; i < overviews.length; i++) files.push({ name: `overview-${i + 1}.png`, data: await toBase64(overviews[i].blob) });
+    // Marks on the same element often get the very same close-up: save it once.
+    const saved = new Map();
     for (const a of S.anns) {
       if (!a.crop) continue;
-      const name = `annotation-${String(a.n).padStart(2, '0')}.png`;
-      shotNames.set(a, name);
-      files.push({ name, data: await toBase64(a.crop) });
+      const data = await toBase64(a.crop);
+      if (!saved.has(data)) {
+        saved.set(data, { name: shotFile(a.n), n: a.n });
+        files.push({ name: shotFile(a.n), data });
+      }
+      shotNames.set(a, saved.get(data));
     }
     busy('Saving…');
-    const result = await post('export', { markdown: buildMarkdown(overviews, shotNames), files });
+    const { points, bare } = tally();
+    const result = await post('export', { markdown: buildMarkdown(overviews, shotNames), files, points, unnoted: bare.length });
     S.dirty = false;
     showExport(result);
   } catch (err) {
@@ -1336,7 +1482,7 @@ async function exportFeedback() {
   }
 }
 
-$('#btn-export').addEventListener('click', exportFeedback);
+$('#btn-export').addEventListener('click', () => exportFeedback());
 
 // ── export dialog
 
@@ -1357,7 +1503,7 @@ function showExport(r) {
   const shots = r.files.filter((f) => f.endsWith('.png')).length;
   $('#modal-title').textContent = r.wait || r.sent ? 'Feedback sent to your agent' : 'Feedback saved';
   if (r.sent) setWait(false);
-  $('#modal-sub').textContent = `feedback.md with ${plural(S.anns.length, 'annotation')} and ${plural(shots, 'screenshot')}` + (r.wait ? ' — this window will close in a moment.' : '');
+  $('#modal-sub').textContent = `feedback.md with ${r.points ? plural(r.points, 'point') + ' to act on' : plural(S.anns.length, 'annotation')} and ${plural(shots, 'screenshot')}` + (r.wait ? ' — this window will close in a moment.' : '');
   $('#modal-path').textContent = r.dir;
   $('#modal-where').value = r.where;
   $('#modal-where-row').hidden = !r.canChooseLocation;
