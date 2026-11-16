@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Draw feedback on an HTML page, PDF or screenshot and export it for an AI coding agent.",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "bin": {
     "markup": "./server.js"
   },
@@ -13,5 +13,25 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "author": "Harry Munro",
+  "homepage": "https://github.com/harrymunro/html-markup#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrymunro/html-markup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/harrymunro/html-markup/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "claude-code",
+    "feedback",
+    "annotation",
+    "screenshot",
+    "design-review",
+    "pdf",
+    "markup"
+  ]
 }

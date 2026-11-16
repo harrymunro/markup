@@ -1,10 +1,28 @@
 # Markup
 
-Draw feedback directly on an HTML page, a PDF or a screenshot, then hand it to your AI
-coding agent as a Markdown file plus screenshots it can read.
+**Markup makes it easy to give visual feedback to coding agents.** Mark up websites and
+PDFs, and it generates the prompt and takes the screenshots for you.
 
-Runs entirely on this machine. No npm install: it needs only Node.js (18+) and Google
-Chrome (Chromium, Edge and Brave also work).
+[![Markup demo: commenting on a page, drawing on it and exporting feedback for an agent](docs/demo.gif)](docs/demo.mp4)
+
+Telling an agent "the button, no, the other one, make it bigger" in words is slow and
+easy to get wrong. With Markup you point at the thing instead: click an element or draw
+on the page, type a note, and export. Your agent gets a Markdown file with every note,
+the element it refers to (selector and `file:line`), and screenshots it can read, plus a
+ready-made prompt on your clipboard.
+
+It runs entirely on your machine, with no account and no install step: it needs only
+Node.js (18+) and Google Chrome (Chromium, Edge and Brave also work). It was built and
+tested on macOS; Linux and Windows are supported in the code but have had little
+testing, so reports are welcome.
+
+## Get it
+
+```sh
+git clone https://github.com/harrymunro/html-markup.git
+cd html-markup
+./markup test/fixtures/site/index.html   # try it on the sample page
+```
 
 ## Run it
 
@@ -45,7 +63,9 @@ appears under a Chrome icon while it is running.)
 | Draw | P | Freehand |
 | Text | T | Click anywhere and type |
 
-Every mark gets a number and an optional note. Marks are attached to the element they
+Every mark gets a number and a note. A comment or text mark needs its note (leave it
+empty and the mark is dropped); on shapes the note is optional, and Markup asks before
+exporting any that have none. Marks are attached to the element they
 refer to, so they stay put while you scroll, resize the window, switch to a phone or
 tablet width, or reload the page after your agent has changed it.
 
@@ -64,11 +84,17 @@ Other things worth knowing:
 
 ```
 markup-feedback/index-20261114-195346/
-  feedback.md         every annotation: your note, the element, selector, file:line
-  overview-1.png      the page with all visible marks in place
-  annotation-01.png   close-up of each mark
+  feedback.md         a checklist of the points, then every annotation: your note,
+                      the element, selector, file:line
+  overview-1.png      the page with all visible marks in place (one per distinct view)
+  annotation-01.png   close-up of each mark (identical close-ups are saved once)
   …
 ```
+
+`feedback.md` opens with a checklist, one line per note, and both it and the prompt ask
+the agent to report back on every point by number, so a skipped one shows. Marks on the
+same element are cross-referenced, since they are often one thought written in two
+goes, and marks without a note are listed apart at the end.
 
 An entry in `feedback.md` looks like this:
 
@@ -125,3 +151,18 @@ then read the feedback file it prints and the screenshots beside it, and apply t
 ```sh
 npm test    # drives the real UI in headless Chrome: HTML, PDF, image and responsive flows
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Two things to know before you start: the project
+has no npm dependencies and no build step, and that is deliberate; and any change to
+`server.js` or `app/` should come with a passing `npm test`.
+
+The demo above is recorded from the real app by `node scripts/record-demo.js` (needs
+ffmpeg), so it can be re-made whenever the UI changes.
+
+## Licence
+
+[MIT](LICENSE). The bundled copy of [pdf.js](https://mozilla.github.io/pdf.js/) in
+`vendor/pdfjs/` is under the Apache 2.0 licence, and the fonts and character maps beside
+it carry their own licences in the same folder.

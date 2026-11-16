@@ -16,6 +16,7 @@ does this in Claude Code).
 npm test                      # end-to-end tests in headless Chrome (HTML, PDF, image, responsive)
 scripts/build-app.sh          # build Markup.app, the Dock launcher (gitignored; path is baked in)
 node scripts/render-icons.js  # rebuild assets/Markup.icns from assets/icon.svg
+node scripts/record-demo.js   # re-record docs/demo.mp4 and demo.gif from the real app (needs ffmpeg)
 ```
 
 ## Architecture
@@ -42,7 +43,7 @@ node scripts/render-icons.js  # rebuild assets/Markup.icns from assets/icon.svg
 
 ## Conventions
 
-- No npm dependencies and no build step. Keep it that way unless Harry says otherwise.
+- No npm dependencies and no build step. Keep it that way unless the maintainer says otherwise.
 - No API reachable from a web page may accept a file path: paths come only from the
   command line (token-authenticated) or from Chrome's own file picker and drops. The
   server answers only to its loopback Host and checks Origin on every POST.

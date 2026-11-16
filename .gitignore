@@ -13,3 +13,7 @@ node_modules/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Personal agent settings for this checkout
+CLAUDE.local.md
+.claude/settings.local.json
