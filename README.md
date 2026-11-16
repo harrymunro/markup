@@ -130,6 +130,43 @@ then read the feedback file it prints and the screenshots beside it, and apply t
 
 ## How it works, and its limits
 
+```mermaid
+flowchart LR
+  cli["markup file.html<br/>run by you, or by an agent with --wait"]
+
+  subgraph server["server.js: local server on 127.0.0.1"]
+    serve["Serves your page from its own folder<br/>and tags each element with its source line"]
+    api["Serves the Markup app and its API"]
+    pipe["DevTools pipe to Chrome"]
+  end
+
+  subgraph chrome["Dedicated Chrome window"]
+    ui["Markup UI<br/>marks drawn on an overlay,<br/>each anchored to a page element"]
+    page["Your page in an iframe<br/>or the PDF / image viewer"]
+  end
+
+  out["markup-feedback folder<br/>feedback.md and screenshots"]
+  agent["AI coding agent"]
+
+  cli -->|starts| api
+  api -->|opens| ui
+  serve -->|HTML with line numbers| page
+  ui -->|reads elements, follows scroll and reflow| page
+  ui -->|asks for screenshots, sends the export| api
+  pipe -->|takes the screenshots| ui
+  api -->|writes| out
+  out -->|"copied prompt, or --wait output"| agent
+  agent -.->|edits the source, you reload| page
+```
+
+1. `markup file.html` starts a small server and opens a Chrome window of its own.
+2. The server sends your page to an iframe in that window, adding the source line to every
+   element on the way.
+3. You draw marks on an overlay above the page. Each mark records the element under it:
+   tag, selector, text and `file:line`.
+4. On export, Chrome takes the screenshots and the server writes `feedback.md` beside them.
+5. Your agent reads that folder, makes the changes and reports back on each point.
+
 - A small local server (bound to 127.0.0.1 on a random port) serves the page from its own
   folder, so relative and root-absolute assets load as they would on a real site. The UI
   opens in a dedicated Chrome window with its own profile, separate from your normal
